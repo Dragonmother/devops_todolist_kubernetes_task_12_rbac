@@ -9,26 +9,38 @@ This project configures Kubernetes RBAC to allow the `secrets-reader` ServiceAcc
 The `security/rbac.yml` manifest creates:
 
 - **ServiceAccount:** `secrets-reader`
-- **Role:** `secrets-reader` with permission to get and list Secrets
-- **RoleBinding:** binds the Role to the ServiceAccount
+- **Role:** `secrets-reader` with permission to list Secrets only
+- **RoleBinding:** binds the Role to the `secrets-reader` ServiceAccount
 
-The Deployment uses the `secrets-reader` ServiceAccount.
+The application Deployment uses the `secrets-reader` ServiceAccount.
 
 ## Deployment and validation
 
-Apply the RBAC configuration:
+### 1. Create the kind cluster
+
+```bash
+kind create cluster --config cluster.yml
+```
+
+### 2. Apply the application configuration
+
+Apply the namespace and application resources according to the project setup. Ensure the `todoapp` namespace and its dependencies exist before applying the RBAC and Deployment manifests.
+
+### 3. Apply RBAC configuration
 
 ```bash
 kubectl apply -f security/rbac.yml
 ```
 
-Apply the application Deployment:
+### 4. Apply the Deployment
 
 ```bash
 kubectl apply -f .infrastructure/app/deployment.yml
 ```
 
-Verify that the ServiceAccount has permission to list Secrets:
+### 5. Verify RBAC permissions
+
+Check that the ServiceAccount can list Secrets:
 
 ```bash
 kubectl auth can-i list secrets --as=system:serviceaccount:todoapp:secrets-reader -n todoapp
@@ -40,19 +52,33 @@ Expected result:
 yes
 ```
 
-Create a test Pod using the same ServiceAccount:
+Check that it cannot get individual Secrets:
 
 ```bash
-kubectl apply -f security/rbac-test.yml
+kubectl auth can-i get secrets --as=system:serviceaccount:todoapp:secrets-reader -n todoapp
 ```
 
-Connect to the test Pod:
+Expected result:
+
+```text
+no
+```
+
+### 6. Execute the request from the Deployment Pod
+
+Get the name of a running Deployment Pod:
 
 ```bash
-kubectl exec -it rbac-test -n todoapp -- sh
+kubectl get pods -n todoapp -l app=todoapp
 ```
 
-Retrieve the ServiceAccount token and CA certificate:
+Connect to the Pod (replace `<pod-name>` with the actual Pod name):
+
+```bash
+kubectl exec -it <pod-name> -n todoapp -- sh
+```
+
+Inside the Pod, retrieve the ServiceAccount token and CA certificate:
 
 ```sh
 TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
@@ -68,3 +94,7 @@ curl --cacert "$CACERT" \
 ```
 
 Expected result: a JSON response of kind `SecretList` containing the Secrets available in the `todoapp` namespace.
+
+### 7. Evidence
+
+Take a screenshot showing the successful request and its `SecretList` response. Attach the screenshot to the Pull Request.
